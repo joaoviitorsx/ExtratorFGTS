@@ -1,0 +1,26 @@
+# Ignorar pasta pdfTESTE
+pdfTESTE/
+
+venv/
+
+# Ignorar arquivos específicos
+*.pdf
+*.log
+*.tmp
+
+# Ignorar arquivos de configuração específicos
+.env
+.DS_Store
+
+# Ignorar arquivos e pastas comuns de IDEs e editores
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Ignorar dependências e diretórios de build
+node_modules/
+dist/
+build/
+bin/
+obj/
