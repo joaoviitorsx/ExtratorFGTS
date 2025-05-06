@@ -85,11 +85,12 @@ class Dashboard(QWidget):
         cards_grid.setSpacing(15)
 
         card1 = AnimatedCard(
-            recurso_caminho("images/card1.png"),
-            "Conversor PDF ALELO",
+            recurso_caminho("images/card2.png"),
+            "Conversor PDF FGTS",
             [
                 "Selecionar pasta",
-                "Extração de transações",
+                "Extração do nome do Empregado",
+                "Base e Valor do FGTS",
                 "Gerar planilha"
             ],
             "#C62828"
