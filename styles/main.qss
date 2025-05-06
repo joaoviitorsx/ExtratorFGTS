@@ -1,0 +1,211 @@
+/* Estilo para o card do login */
+QFrame#cardContainer {
+    background-color: rgba(180, 25, 25, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 24px;
+}
+
+/* Campos de entrada (usuário/senha) */
+QLineEdit#campoInput {
+    background-color: #202020;
+    border: 1px solid #3A3A3A;
+    border-radius: 8px;
+    padding: 10px;
+    color: white;
+    font-size: 14px;
+}
+QLineEdit#campoInput:focus {
+    border: 1px solid #D32F2F;
+}
+
+QPushButton#botaoPrincipal {
+    background-color: #E53935;
+    color: white;
+    border-radius: 8px;
+    padding: 12px;
+    font-weight: bold;
+    font-size: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+QPushButton#botaoPrincipal:hover {
+    background-color: #B71C1C;
+}
+
+QPushButton#botaoPrincipal:pressed {
+    background-color: #9A0007;
+}
+
+QPushButton#botaoPrincipal:disabled {
+    background-color: #444444;
+    color: #CCCCCC;
+}
+
+#botaoSecundario {
+    background-color: #2a2a2a;
+    color: #ffffff;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-weight: 500;
+    border: 1px solid #444;
+}
+#botaoSecundario:hover {
+    background-color: #3a3a3a;
+}
+
+
+/* Título */
+QLabel#titulo {
+    font-size: 20px;
+    font-weight: 600;
+    color: #FFFFFF;
+}
+
+/* Descrição */
+QLabel#descricao {
+    font-size: 13px;
+    color: #BBBBBB;
+}
+
+#sidebarMenu {
+    background-color: #202020;
+    color: #FFFFFF;
+    font-weight: 500;
+}
+#headerTitle {
+    font-weight: bold;
+    font-size: 16px;
+    color:rgb(255, 255, 255);
+}
+
+#cardContainer {
+    background-color: #1e1e1e;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 24px;
+}
+
+#painelResultado {
+    background-color: #fdfdfd;
+    border: 1px solid #cccccc;
+    color: #1a1a1a;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+QFrame#infoEmpresaContainer {
+    background-color: #1E1E1E;
+    border-radius: 8px;
+    padding: 12px;
+    color: white;
+}
+
+#cardContainer {
+    background-color: #1f1f1f;
+    border-radius: 12px;
+    padding: 24px;
+}
+
+#campoInput {
+    background-color: #121212;
+    color: white;
+    padding: 10px;
+    font-size: 14px;
+    border: 1px solid #444;
+    border-radius: 6px;
+}
+#campoInput:focus {
+    border: 1px solid #3a78ff;
+}
+
+#botaoPrincipal {
+    background-color: #3a78ff;
+    color: white;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 10px;
+}
+#botaoPrincipal:hover {
+    background-color: #2a64d6;
+}
+
+#botaoSecundario {
+    background-color: #2a2a2a;
+    color: white;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 8px 14px;
+    border: 1px solid #444;
+}
+#botaoSecundario:hover {
+    background-color: #3a3a3a;
+}
+
+#titulo {
+    font-size: 18px;
+    font-weight: bold;
+    color: white;
+}
+#descricao {
+    font-size: 13px;
+    color: #c0c0c0;
+}
+
+QLabel#labelTela {
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-left: 20px;
+}
+
+QWidget {
+    background-color: #181818;
+    color: white;
+    font-family: Segoe UI;
+    font-size: 14px;
+}
+QListWidget#sidebarMenu {
+    background-color: #202020;
+    border: none;
+    padding: 10px;
+}
+        
+QListWidget#sidebarMenu::item {
+    padding: 10px;
+    margin: 4px 0;
+    border-radius: 6px;
+}
+
+QListWidget#sidebarMenu::item:selected {
+    background-color: #E53935;
+}
+
+QListWidget#sidebarMenu::item:hover {
+    background-color: #333333;
+}
+
+QLabel#headerTitle {
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+}
+
+QLabel#labelTela {
+    font-size: 16px;
+    font-weight: normal;
+    color: #cccccc;
+}
+
+QPushButton#toggleSidebar {
+    background-color: #2c2c2c;
+    border: none;
+    color: white;
+    font-size: 18px;
+    border-radius: 4px;
+}
+
+QPushButton#toggleSidebar:hover {
+    background-color: #444444;
+}
