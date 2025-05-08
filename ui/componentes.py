@@ -121,7 +121,6 @@ class AnimatedCard(QFrame):
         self.layout.setContentsMargins(25, 22, 25, 22)
         self.layout.setSpacing(15)
 
-        # Ícone
         self.icon_label = QLabel()
         pixmap = QPixmap(icon_path)
         if not pixmap.isNull():
@@ -134,12 +133,10 @@ class AnimatedCard(QFrame):
         icon_layout = QVBoxLayout(self.icon_container)
         icon_layout.addWidget(self.icon_label)
 
-        # Título
         self.title_label = QLabel(title)
         self.title_label.setFont(QFont("Segoe UI", 15, QFont.Bold))
         self.title_label.setStyleSheet("color: white;")
 
-        # Descrição
         self.desc_label = QLabel()
         desc_text = "<ul style='margin: 0; padding-left: 18px;'>"
         for item in description_list:
@@ -150,11 +147,9 @@ class AnimatedCard(QFrame):
         self.desc_label.setTextFormat(Qt.RichText)
         self.desc_label.setWordWrap(True)
 
-        # Botão
         self.button = BotaoPrimario("Acessar", accent_color)
         self.button.clicked.connect(self.clicked.emit)
 
-        # Layout do card
         header_layout = QHBoxLayout()
         header_layout.addWidget(self.icon_container)
         header_layout.addStretch()
@@ -165,7 +160,6 @@ class AnimatedCard(QFrame):
         self.layout.addStretch()
         self.layout.addWidget(self.button)
 
-        # Animação de entrada
         self.opacity_effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.opacity_effect)
         self.animation = QPropertyAnimation(self.opacity_effect, b"opacity")
@@ -174,7 +168,6 @@ class AnimatedCard(QFrame):
         self.animation.setEndValue(1)
         self.animation.setEasingCurve(QEasingCurve.InOutQuad)
 
-        # Animação de hover
         self.hover_animation = QPropertyAnimation(self, b"geometry")
         self.hover_animation.setDuration(200)
         self.hover_animation.setEasingCurve(QEasingCurve.OutCubic)

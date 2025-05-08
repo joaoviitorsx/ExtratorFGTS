@@ -103,7 +103,6 @@ class Dashboard(QWidget):
         cards_section.addLayout(cards_grid)
         content_layout.addLayout(cards_section)
 
-        # Rodapé
         footer = QLabel("© 2025 Assertivus Contábil - Todos os direitos reservados.")
         footer.setStyleSheet("color: #FFFFFF; font-size: 12px; margin-top: 30px;")
         footer.setAlignment(Qt.AlignCenter)
