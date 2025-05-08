@@ -1,11 +1,11 @@
 import os
-import pandas as pd
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar, QHBoxLayout, QFileDialog, QFrame, QMessageBox, QTableWidget, QTableWidgetItem, QSizePolicy
 from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QFont, QPixmap
 from utils.icone import usar_icone, recurso_caminho
+from utils.extracao_fgts import extrair_texto_pdf, extrair_dados_fgts
+from utils.gerador_planilha import gerar_planilha_fgts
 from ui.componentes import BotaoPrimario, BotaoSecundario
-
 
 class WorkerThread(QThread):
     progress = Signal(int)
@@ -26,41 +26,30 @@ class WorkerThread(QThread):
                 total_arquivos = len(arquivos_pdf)
                 for idx, arquivo in enumerate(arquivos_pdf, 1):
                     caminho_completo = os.path.join(self.caminho, arquivo)
-                    self.processar_arquivo(caminho_completo, dados_totais, arquivo)
+                    texto = extrair_texto_pdf(caminho_completo)
+                    dados = extrair_dados_fgts(texto)
+                    dados_totais.extend(dados)
                     progresso = int((idx / total_arquivos) * 100)
                     self.progress.emit(progresso)
             else:
                 nome_arquivo = os.path.basename(self.caminho)
-                self.processar_arquivo(self.caminho, dados_totais, nome_arquivo)
+                texto = extrair_texto_pdf(self.caminho)
+                dados = extrair_dados_fgts(texto)
+                dados_totais.extend(dados)
                 self.progress.emit(100)
             self.finished.emit(dados_totais, nome_arquivo)
         except Exception as e:
             self.error.emit(str(e))
 
-    def processar_arquivo(self, caminho, dados_totais, nome_arquivo):
-        tipo_pdf = determinar_tipo_pdf(caminho)
-        if tipo_pdf == "MATRIZ":
-            linhas = extrair_transacoes_matriz(caminho)
-        elif tipo_pdf == "FILIAL":
-            linhas = extrair_transacoes_filial(caminho)
-        else:
-            return
-        for linha in linhas:
-            dados = filtrar_dados_transacao(linha)
-            if dados:
-                dados.append(nome_arquivo)
-                dados_totais.append(dados)
-
 
 class TelaExtracao(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Extração de Dados - Assertivus Contábil")
+        self.setWindowTitle("Extração de Dados FGTS - Assertivus Contábil")
         self.setGeometry(300, 100, 1200, 720)
         self.setStyleSheet("background-color: #181818; color: #ECECEC; font-family: 'Segoe UI';")
         self.dados_extraidos = []
         self.nome_arquivo = ""
-        self.caminho_csv = None
         self.init_ui()
         usar_icone(self)
 
@@ -86,7 +75,7 @@ class TelaExtracao(QWidget):
         logo_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(logo_label)
 
-        titulo = QLabel("Conversor de PDF ALELO")
+        titulo = QLabel("Conversor de PDF FGTS")
         titulo.setFont(QFont("Segoe UI", 24, QFont.Bold))
         titulo.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(titulo)
@@ -96,13 +85,10 @@ class TelaExtracao(QWidget):
         botoes_layout.setAlignment(Qt.AlignCenter)
         self.botao_selecionar_pasta = BotaoPrimario("Selecionar Pasta de PDFs", "#43A047", "#2E7D32", recurso_caminho("images/pasta.png"))
         self.botao_selecionar_pasta.clicked.connect(lambda: self.selecionar_arquivo(True))
-        self.botao_selecionar_csv = BotaoPrimario("Selecionar Arquivo CSV", "#FFC107", "#FFA000", recurso_caminho("images/csv.png"))
-        self.botao_selecionar_csv.clicked.connect(self.selecionar_csv)
         self.botao_gerar = BotaoPrimario("Gerar Planilha", "#2196F3", "#1976D2", None)
         self.botao_gerar.setEnabled(False)
         self.botao_gerar.clicked.connect(self.gerar_planilha)
         botoes_layout.addWidget(self.botao_selecionar_pasta)
-        botoes_layout.addWidget(self.botao_selecionar_csv)
         botoes_layout.addWidget(self.botao_gerar)
         main_layout.addLayout(botoes_layout)
 
@@ -133,25 +119,11 @@ class TelaExtracao(QWidget):
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
             self.botao_selecionar_pasta.setEnabled(False)
-            self.botao_selecionar_csv.setEnabled(False)
             self.worker = WorkerThread(caminho, is_pasta)
             self.worker.progress.connect(self.atualizar_progresso)
             self.worker.finished.connect(self.processamento_concluido)
             self.worker.error.connect(self.erro_processamento)
             self.worker.start()
-
-    def selecionar_csv(self):
-        caminho_csv, _ = QFileDialog.getOpenFileName(self, "Selecionar Arquivo CSV", "", "Arquivos CSV (*.csv)")
-        if caminho_csv:
-            try:
-                # Valida a estrutura do CSV
-                df_validado = carregar_planilha_relacao(caminho_csv)
-                if df_validado.empty:
-                    raise ValueError("O arquivo CSV está vazio após o processamento.")
-                self.caminho_csv = caminho_csv
-                QMessageBox.information(self, "CSV Válido", f"Arquivo CSV carregado com sucesso:\n{caminho_csv}")
-            except Exception as e:
-                QMessageBox.critical(self, "Erro no CSV", f"Erro ao validar o CSV:\n{str(e)}")
 
     def atualizar_progresso(self, valor):
         self.progress_bar.setValue(valor)
@@ -161,13 +133,8 @@ class TelaExtracao(QWidget):
         self.nome_arquivo = nome_arquivo
         self.progress_bar.setVisible(False)
         self.botao_selecionar_pasta.setEnabled(True)
-        self.botao_selecionar_csv.setEnabled(True)
 
-        header = [
-            'DATA', 'BASE', 'CNPJ', 'Nº NF', 'MERCADORIA',
-            'QUANTIDADE', 'VALOR TOTAL', 'ESTABELECIMENTO',
-            'CIDADE/UF', 'ARQUIVO ORIGEM'
-        ]
+        header = ["Matricula", "Empregado", "Admissao", "CPF", "Base FGTS", "Valor FGTS"]
         self.table.clear()
         self.table.setColumnCount(len(header))
         self.table.setRowCount(len(dados))
@@ -183,21 +150,17 @@ class TelaExtracao(QWidget):
     def erro_processamento(self, mensagem_erro):
         self.progress_bar.setVisible(False)
         self.botao_selecionar_pasta.setEnabled(True)
-        self.botao_selecionar_csv.setEnabled(True)
         QMessageBox.critical(self, "Erro", f"Erro ao processar o(s) arquivo(s): {mensagem_erro}")
 
     def gerar_planilha(self):
         if not self.dados_extraidos:
             QMessageBox.warning(self, "Aviso", "Não há dados para gerar a planilha.")
             return
-        if not self.caminho_csv:
-            QMessageBox.warning(self, "Aviso", "Selecione um arquivo CSV antes de gerar a planilha.")
-            return
 
-        df_pdf = pd.DataFrame(self.dados_extraidos, columns=[
-            'DATA', 'BASE', 'CNPJ', 'Nº NF', 'MERCADORIA',
-            'QUANTIDADE', 'VALOR TOTAL', 'ESTABELECIMENTO',
-            'CIDADE/UF', 'ARQUIVO ORIGEM'
-        ])
-
-        comparar_transacoes_interface(df_pdf, self, self.caminho_csv)
+        caminho_saida, _ = QFileDialog.getSaveFileName(self, "Salvar Planilha", "planilha_fgts.xlsx", "Planilhas Excel (*.xlsx)")
+        if caminho_saida:
+            try:
+                gerar_planilha_fgts(self.dados_extraidos, caminho_saida)
+                QMessageBox.information(self, "Sucesso", f"Planilha gerada com sucesso em:\n{caminho_saida}")
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao gerar planilha:\n{str(e)}")
