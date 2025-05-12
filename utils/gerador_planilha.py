@@ -4,7 +4,7 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 def gerar_planilha_fgts(dados, caminho_saida):
-    colunas = ["Matricula", "Empregado", "Admissao", "CPF", "Base FGTS", "Valor FGTS"]
+    colunas = ["Matrícula", "Empregado", "Admissão", "CPF", "Base FGTS", "Valor FGTS"]
     df = pd.DataFrame(dados, columns=colunas)
 
     wb = Workbook()
