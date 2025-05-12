@@ -1,11 +1,15 @@
 import os
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar, QHBoxLayout, QFileDialog, QFrame, QMessageBox, QTableWidget, QTableWidgetItem, QSizePolicy
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar, QHBoxLayout,QFileDialog, QFrame, QMessageBox, QTableWidget, QTableWidgetItem,QSizePolicy
 from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QFont, QPixmap
-from utils.icone import usar_icone, recurso_caminho
-from utils.extracao_fgts import extrair_texto_pdf, extrair_dados_fgts
-from utils.gerador_planilha import gerar_planilha_fgts
+
 from ui.componentes import BotaoPrimario, BotaoSecundario
+from utils.pdf_utils import extrair_texto_pdf
+from utils.extracao_fgts import extrair_dados_fgts_mensal
+from utils.gerador_planilha import gerar_planilha_fgts
+from utils.mensagem import mensagem_error, mensagem_sucesso, mensagem_aviso
+from utils.icone import usar_icone, recurso_caminho
+
 
 class WorkerThread(QThread):
     progress = Signal(int)
@@ -27,16 +31,17 @@ class WorkerThread(QThread):
                 for idx, arquivo in enumerate(arquivos_pdf, 1):
                     caminho_completo = os.path.join(self.caminho, arquivo)
                     texto = extrair_texto_pdf(caminho_completo)
-                    dados = extrair_dados_fgts(texto)
+                    dados = extrair_dados_fgts_mensal(texto)
                     dados_totais.extend(dados)
                     progresso = int((idx / total_arquivos) * 100)
                     self.progress.emit(progresso)
             else:
                 nome_arquivo = os.path.basename(self.caminho)
                 texto = extrair_texto_pdf(self.caminho)
-                dados = extrair_dados_fgts(texto)
+                dados = extrair_dados_fgts_mensal(texto)
                 dados_totais.extend(dados)
                 self.progress.emit(100)
+
             self.finished.emit(dados_totais, nome_arquivo)
         except Exception as e:
             self.error.emit(str(e))
@@ -58,6 +63,7 @@ class TelaExtracao(QWidget):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(20)
 
+        # Cabeçalho com botão de voltar
         header = QFrame()
         header.setFixedHeight(60)
         header_layout = QHBoxLayout(header)
@@ -68,6 +74,7 @@ class TelaExtracao(QWidget):
         header_layout.addStretch()
         main_layout.addWidget(header)
 
+        # Logo
         logo_label = QLabel()
         pix = QPixmap(recurso_caminho("images/logo.png"))
         if not pix.isNull():
@@ -75,28 +82,36 @@ class TelaExtracao(QWidget):
         logo_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(logo_label)
 
+        # Título
         titulo = QLabel("Conversor de PDF FGTS")
         titulo.setFont(QFont("Segoe UI", 24, QFont.Bold))
         titulo.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(titulo)
 
+        # Botões principais
         botoes_layout = QHBoxLayout()
         botoes_layout.setSpacing(20)
         botoes_layout.setAlignment(Qt.AlignCenter)
+
         self.botao_selecionar_pasta = BotaoPrimario("Selecionar Pasta de PDFs", "#43A047", "#2E7D32", recurso_caminho("images/pasta.png"))
         self.botao_selecionar_pasta.clicked.connect(lambda: self.selecionar_arquivo(True))
+
         self.botao_gerar = BotaoPrimario("Gerar Planilha", "#2196F3", "#1976D2", None)
         self.botao_gerar.setEnabled(False)
         self.botao_gerar.clicked.connect(self.gerar_planilha)
+
         botoes_layout.addWidget(self.botao_selecionar_pasta)
         botoes_layout.addWidget(self.botao_gerar)
+
         main_layout.addLayout(botoes_layout)
 
+        # Barra de progresso
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedWidth(400)
         self.progress_bar.setVisible(False)
         main_layout.addWidget(self.progress_bar, alignment=Qt.AlignCenter)
 
+        # Tabela de resultados
         self.table = QTableWidget()
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.table.setVisible(False)
@@ -115,10 +130,12 @@ class TelaExtracao(QWidget):
             caminho = QFileDialog.getExistingDirectory(self, "Selecionar Pasta de PDFs", "")
         else:
             return
+
         if caminho:
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
             self.botao_selecionar_pasta.setEnabled(False)
+
             self.worker = WorkerThread(caminho, is_pasta)
             self.worker.progress.connect(self.atualizar_progresso)
             self.worker.finished.connect(self.processamento_concluido)
@@ -139,9 +156,11 @@ class TelaExtracao(QWidget):
         self.table.setColumnCount(len(header))
         self.table.setRowCount(len(dados))
         self.table.setHorizontalHeaderLabels(header)
+
         for r, row_data in enumerate(dados):
             for c, val in enumerate(row_data):
                 self.table.setItem(r, c, QTableWidgetItem(str(val)))
+
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.resizeRowsToContents()
         self.table.setVisible(True)

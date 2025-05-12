@@ -1,5 +1,3 @@
-import logging
-import warnings
 from PySide6.QtWidgets import QApplication
 from ui.dashboard import Dashboard
 

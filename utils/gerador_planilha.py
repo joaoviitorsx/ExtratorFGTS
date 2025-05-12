@@ -4,8 +4,10 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 def gerar_planilha_fgts(dados, caminho_saida):
+    print(f"[DEBUG] Iniciando geração da planilha: {caminho_saida}")
     colunas = ["Matrícula", "Empregado", "Admissão", "CPF", "Base FGTS", "Valor FGTS"]
     df = pd.DataFrame(dados, columns=colunas)
+    print(f"[DEBUG] DataFrame criado com {len(df)} linhas")
 
     wb = Workbook()
     ws = wb.active
@@ -30,4 +32,4 @@ def gerar_planilha_fgts(dados, caminho_saida):
         ws.column_dimensions[coluna_letra].width = largura_maxima + 2
 
     wb.save(caminho_saida)
-    print(f"Planilha gerada com sucesso: {caminho_saida}")
+    print(f"[DEBUG] Planilha salva com sucesso em: {caminho_saida}")

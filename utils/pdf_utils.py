@@ -1,18 +1,12 @@
-import pdfplumber
+import fitz
 
 def extrair_texto_pdf(caminho_pdf):
+    print(f"[DEBUG] Iniciando extração de texto com PyMuPDF: {caminho_pdf}")
     texto = ""
-    with pdfplumber.open(caminho_pdf) as pdf:
-        for i, pagina in enumerate(pdf.pages):
-            conteudo = pagina.extract_text()
-            if conteudo:
-                texto += conteudo + "\n"
+    with fitz.open(caminho_pdf) as doc:
+        for i, page in enumerate(doc):
+            pagina_texto = page.get_text()
+            print(f"[DEBUG] Página {i+1} extraída com {len(pagina_texto)} caracteres")
+            texto += pagina_texto + "\n"
+    print(f"[DEBUG] Extração finalizada com {len(texto)} caracteres no total")
     return texto
-
-def identificar_layout_pdf(texto):
-    if "Base FGTS:" in texto:
-        return "FGTS"
-    elif "Empr.:" in texto:
-        return "Folha Mensal"
-    else:
-        return "Desconhecido"
