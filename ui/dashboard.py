@@ -1,10 +1,8 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame, QScrollArea, QGridLayout
 from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QFont, QPixmap
-
 from ui.componentes import AnimatedCard
 from ui.extracao import TelaExtracao
-
 from utils.icone import usar_icone, recurso_caminho
 
 class Dashboard(QWidget):
