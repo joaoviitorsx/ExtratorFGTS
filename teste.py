@@ -15,51 +15,160 @@ dados_extraidos = []
 def extrair_dados_fgts_pdfplumber(caminho_pdf):
     import pdfplumber
     import re
-
+    import warnings
+    
+    warnings.filterwarnings('ignore')  # Ignorar avisos do pdfplumber
     dados_por_competencia = {}
     competencia_atual = None
 
-    regex_empregado = re.compile(
-        r"Empr\.\:\s*(\d+)"
-        r"([A-ZÁÉÍÓÚÃÕÇÂÊÔÜ\s]+?)"
-        r"\s+Situação\:\s*[A-Za-zÇçãõéÉ\s]+"
-        r"\s+CPF\:\s*([\d\.\-]+).*?"
-        r"Adm\:\s*(\d{2}/\d{4}|\d{2}/\d{2}/\d{4}).*?"
-        r"Base FGTS:\s*([\d\.,]+)\s+Valor FGTS:\s*([\d\.,]+)",
-        flags=re.DOTALL
-    )
+    try:
+        with pdfplumber.open(caminho_pdf) as pdf:
+            for pagina in pdf.pages:
+                texto = pagina.extract_text()
+                if not texto:
+                    continue
 
-    with pdfplumber.open(caminho_pdf) as pdf:
-        for pagina in pdf.pages:
-            texto = pagina.extract_text()
-            if not texto:
-                continue
+                # Busca mais robusta da competência
+                match_comp = re.search(r"(?i)\bcompet[êeéè]ncia\:?\s*(\d{2}/\d{4})", texto)
+                if match_comp:
+                    competencia_atual = match_comp.group(1)
 
-            # Detectar a competência da página (se mudar ao longo do PDF)
-            match_comp = re.search(r"(?i)\bcompet[êe]ncia\:? ?(\d{2}/\d{4})", texto)
-            if match_comp:
-                competencia_atual = match_comp.group(1)
+                if not competencia_atual:
+                    continue
 
-            if not competencia_atual:
-                continue
+                # Melhor segmentação dos blocos de empregados
+                blocos = re.split(r"\n(?=Empr\.\:\s*\d+)", texto)
 
-            # Aplica o regex diretamente no texto da página
-            for match in regex_empregado.finditer(texto):
-                matricula, nome, cpf, admissao, base_fgts, valor_fgts = match.groups()
-                nome = re.sub(r"\s+", " ", nome.strip()).title()
+                for bloco in blocos:
+                    if not re.search(r"^Empr\.\:", bloco.strip()):
+                        continue
+                    
+                    # Estratégia principal - regex aprimorado para nomes mais complexos
+                    match_dados = re.search(
+                        r"Empr\.\:\s*(\d+)\s*([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÜÇÑ\s\-\.]+?)"  # Matrícula e nome
+                        r"\s+Situação\:\s*\w+\s+CPF\:\s*([\d\.\-]+)"            # Situação e CPF
+                        r".*?Adm\:\s*(\d{2}/\d{2}/\d{4}|\d{2}/\d{2}/\d{2}|\d{2}/\d{4})",  # Data admissão
+                        bloco, 
+                        flags=re.DOTALL
+                    )
+                    
+                    # Tentativa alternativa caso o padrão principal falhe
+                    if not match_dados:
+                        match_dados = re.search(
+                            r"Empr\.\:\s*(\d+)\s*([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÜÇÑ\s\-\.]+?)"  # Matrícula e nome
+                            r"(?=\s+Situação:|\s+CPF:)"                          # Lookahead para próximo campo
+                            r".*?CPF\:\s*([\d\.\-]+)"                           # CPF
+                            r".*?Adm\:\s*(\d{2}/\d{2}/\d{4}|\d{2}/\d{2}/\d{2}|\d{2}/\d{4})",  # Data admissão
+                            bloco, 
+                            flags=re.DOTALL
+                        )
+                    
+                    # Terceira tentativa - extração por partes para casos complexos
+                    if not match_dados:
+                        # Extração individual de cada campo
+                        match_matricula = re.search(r"Empr\.\:\s*(\d+)", bloco)
+                        match_cpf = re.search(r"CPF\:\s*([\d\.\-]+)", bloco)
+                        match_adm = re.search(r"Adm\:\s*(\d{2}/\d{2}/\d{4}|\d{2}/\d{2}/\d{2}|\d{2}/\d{4})", bloco)
+                        
+                        if match_matricula and match_cpf and match_adm:
+                            # Extrair nome entre matrícula e "Situação" ou "CPF"
+                            inicio_texto = bloco[match_matricula.end():]
+                            match_fim = re.search(r"\s+(?:Situação|CPF)\:", inicio_texto)
+                            
+                            if match_fim:
+                                nome = inicio_texto[:match_fim.start()].strip()
+                                # Criar resultado simulado para seguir o fluxo normal
+                                class MockMatch:
+                                    def groups(self):
+                                        return (match_matricula.group(1), nome, 
+                                                match_cpf.group(1), match_adm.group(1))
+                                
+                                match_dados = MockMatch()
+                    
+                    # Se ainda não extraiu dados básicos, continuar para o próximo
+                    if not match_dados:
+                        continue
 
-                registro = {
-                    "Matricula": matricula,
-                    "Empregado": nome,
-                    "CPF": cpf,
-                    "Admissao": admissao,
-                    "Base FGTS": base_fgts.replace(".", "").replace(",", "."),
-                    "Valor FGTS": valor_fgts.replace(".", "").replace(",", ".")
-                }
+                    matricula, nome, cpf, admissao = match_dados.groups()
+                    
+                    # Limpeza e normalização do nome - melhorada para nomes complexos
+                    nome = re.sub(r"\s+", " ", nome.strip())
+                    nome = nome.title()  # Primeira letra de cada palavra maiúscula
+                    
+                    # Extração robusta de Base FGTS e Valor FGTS
+                    match_fgts = re.search(
+                        r"Base\s*FGTS\:?\s*([\d\.,]+)[\s\n]*Valor\s*FGTS\:?\s*([\d\.,]+)", 
+                        bloco
+                    )
+                    
+                    # Tentativa alternativa para os valores FGTS
+                    if not match_fgts:
+                        match_fgts = re.search(
+                            r"Base\s*FGTS\:?\s*([\d\.,]+).*?Valor\s*FGTS\:?\s*([\d\.,]+)",
+                            bloco,
+                            flags=re.DOTALL
+                        )
+                        
+                    if not match_fgts:
+                        # Busca específica na linha que contém "Base IRRF" 
+                        # (geralmente contém os dados do FGTS no final do bloco)
+                        linhas = bloco.split('\n')
+                        for linha in linhas:
+                            if "Base IRRF" in linha and "Base FGTS" in linha:
+                                match_fgts = re.search(
+                                    r"Base\s*FGTS\:?\s*([\d\.,]+).*?Valor\s*FGTS\:?\s*([\d\.,]+)",
+                                    linha
+                                )
+                                if match_fgts:
+                                    break
+                                    
+                    # Última tentativa - buscar Base FGTS e Valor FGTS separadamente
+                    if not match_fgts:
+                        match_base = re.search(r"Base\s*FGTS\:?\s*([\d\.,]+)", bloco)
+                        match_valor = re.search(r"Valor\s*FGTS\:?\s*([\d\.,]+)", bloco)
+                        
+                        if match_base and match_valor:
+                            # Se encontrar ambos, usar como se fosse um match completo
+                            class FGTSMatch:
+                                def groups(self):
+                                    return match_base.group(1), match_valor.group(1)
+                            match_fgts = FGTSMatch()
+                                    
+                    if not match_fgts:
+                        continue
 
-                dados_por_competencia.setdefault(competencia_atual, []).append(registro)
+                    base_fgts, valor_fgts = match_fgts.groups()
+                    
+                    # Validação dos valores numéricos
+                    try:
+                        base_fgts_num = base_fgts.replace(".", "").replace(",", ".")
+                        valor_fgts_num = valor_fgts.replace(".", "").replace(",", ".")
+                        
+                        # Verificação extra para confirmar que são números válidos
+                        _ = float(base_fgts_num)
+                        _ = float(valor_fgts_num)
+                    except ValueError:
+                        continue
 
-    return dados_por_competencia
+                    # Construção do registro com validações adicionais
+                    registro = {
+                        "Matricula": matricula.strip(),
+                        "Empregado": nome,
+                        "CPF": cpf.strip(),
+                        "Admissao": admissao.strip(),
+                        "Base FGTS": base_fgts_num,
+                        "Valor FGTS": valor_fgts_num
+                    }
+
+                    # Verificação final da integridade dos dados
+                    if all(registro.values()):
+                        dados_por_competencia.setdefault(competencia_atual, []).append(registro)
+
+        return dados_por_competencia
+        
+    except Exception as e:
+        print(f"Erro ao processar o PDF: {str(e)}")
+        return {}
 
 def atualizar_visualizacao(registros_por_competencia):
     global dados_extraidos
