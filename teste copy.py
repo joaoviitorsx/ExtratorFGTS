@@ -19,23 +19,12 @@ def extrair_dados_fgts_pdfplumber(caminho_pdf):
     dados_por_competencia = {}
     competencia_atual = None
 
-    regex_empregado = re.compile(
-        r"Empr\.\:\s*(\d+)"
-        r"([A-ZÁÉÍÓÚÃÕÇÂÊÔÜ\s]+?)"
-        r"\s+Situação\:\s*[A-Za-zÇçãõéÉ\s]+"
-        r"\s+CPF\:\s*([\d\.\-]+).*?"
-        r"Adm\:\s*(\d{2}/\d{4}|\d{2}/\d{2}/\d{4}).*?"
-        r"Base FGTS:\s*([\d\.,]+)\s+Valor FGTS:\s*([\d\.,]+)",
-        flags=re.DOTALL
-    )
-
     with pdfplumber.open(caminho_pdf) as pdf:
         for pagina in pdf.pages:
             texto = pagina.extract_text()
             if not texto:
                 continue
 
-            # Detectar a competência da página (se mudar ao longo do PDF)
             match_comp = re.search(r"(?i)\bcompet[êe]ncia\:? ?(\d{2}/\d{4})", texto)
             if match_comp:
                 competencia_atual = match_comp.group(1)
@@ -43,10 +32,30 @@ def extrair_dados_fgts_pdfplumber(caminho_pdf):
             if not competencia_atual:
                 continue
 
-            # Aplica o regex diretamente no texto da página
-            for match in regex_empregado.finditer(texto):
-                matricula, nome, cpf, admissao, base_fgts, valor_fgts = match.groups()
+            blocos = re.split(r"\n(?=Empr\.\:\s*\d+)", texto)
+
+            for bloco in blocos:
+                if not bloco.strip().startswith("Empr.:"):
+                    continue
+
+                match_dados = re.search(
+                    r"Empr\.\:\s*(\d+)\s*([A-Z\sÇÃÕÁÉÍÓÚÂÊÔÜ]+?)\s+Situação\:\s*\w+\s+CPF\:\s*([\d\.\-]+).*?Adm\:\s*(\d{2}/\d{4}|\d{2}/\d{2}/\d{4})",
+                    bloco,
+                    flags=re.DOTALL
+                )
+                if not match_dados:
+                    continue
+
+                matricula, nome, cpf, admissao = match_dados.groups()
                 nome = re.sub(r"\s+", " ", nome.strip()).title()
+
+                match_fgts = re.search(
+                    r"Base FGTS:\s*([\d\.,]+)\s+Valor FGTS:\s*([\d\.,]+)", bloco
+                )
+                if not match_fgts:
+                    continue
+
+                base_fgts, valor_fgts = match_fgts.groups()
 
                 registro = {
                     "Matricula": matricula,
