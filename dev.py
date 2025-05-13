@@ -34,15 +34,20 @@ def extrair_dados_fgts_pdfplumber(caminho_pdf):
                 if not competencia_atual:
                     continue
 
-                blocos = re.split(r"\n(?=Empr\.\:\s*\d+)", texto)
+                blocos_encontrados = re.findall(r"(?:^|\n|\s)Empr\.\:?\s*\d+.*?(?=(?:\n|\s)Empr\.\:|$)", texto, re.DOTALL)
+                
+                if not blocos_encontrados:
+                    blocos = re.split(r"\n(?=Empr\.\:\s*\d+)", texto)
+                else:
+                    blocos = blocos_encontrados
 
                 for bloco in blocos:
-                    if not re.search(r"^Empr\.\:", bloco.strip()):
+                    if not re.search(r"Empr\.\:?", bloco):
                         continue
                     
                     match_dados = re.search(
-                        r"Empr\.\:\s*(\d+)\s*([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÜÇÑ\s\-\.]+?)"  
-                        r"\s+Situação\:\s*\w+\s+CPF\:\s*([\d\.\-]+)"            
+                        r"Empr\.\:?\s*(\d+)\s*([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÜÇÑ\s\-\.]+?)(?:Situação|CPF)\:"  
+                        r".*?CPF\:\s*([\d\.\-]+)"            
                         r".*?Adm\:\s*(\d{2}/\d{2}/\d{4}|\d{2}/\d{2}/\d{2}|\d{2}/\d{4})",
                         bloco, 
                         flags=re.DOTALL
@@ -50,8 +55,7 @@ def extrair_dados_fgts_pdfplumber(caminho_pdf):
                     
                     if not match_dados:
                         match_dados = re.search(
-                            r"Empr\.\:\s*(\d+)\s*([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÜÇÑ\s\-\.]+?)"
-                            r"(?=\s+Situação:|\s+CPF:)"                          
+                            r"Empr\.\:?\s*(\d+)([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÜÇÑ\s\-\.]+?)(?=Situação\:|CPF\:)"
                             r".*?CPF\:\s*([\d\.\-]+)"                           
                             r".*?Adm\:\s*(\d{2}/\d{2}/\d{4}|\d{2}/\d{2}/\d{2}|\d{2}/\d{4})",
                             bloco, 
@@ -59,22 +63,38 @@ def extrair_dados_fgts_pdfplumber(caminho_pdf):
                         )
                     
                     if not match_dados:
-                        match_matricula = re.search(r"Empr\.\:\s*(\d+)", bloco)
+                        match_matricula = re.search(r"Empr\.\:?\s*(\d+)", bloco)
                         match_cpf = re.search(r"CPF\:\s*([\d\.\-]+)", bloco)
                         match_adm = re.search(r"Adm\:\s*(\d{2}/\d{2}/\d{4}|\d{2}/\d{2}/\d{2}|\d{2}/\d{4})", bloco)
                         
                         if match_matricula and match_cpf and match_adm:
+                            matricula = match_matricula.group(1)
+                            
+                            nome = ""
                             inicio_texto = bloco[match_matricula.end():]
                             match_fim = re.search(r"\s+(?:Situação|CPF)\:", inicio_texto)
                             
                             if match_fim:
                                 nome = inicio_texto[:match_fim.start()].strip()
-                                class MockMatch:
-                                    def groups(self):
-                                        return (match_matricula.group(1), nome, 
-                                                match_cpf.group(1), match_adm.group(1))
-                                
-                                match_dados = MockMatch()
+                            
+                            if not nome or len(nome) < 3:
+                                palavras = bloco.split()
+                                for i in range(len(palavras)):
+                                    if palavras[i].startswith("Empr.") and i+2 < len(palavras):
+                                        possivel_nome = []
+                                        for j in range(i+2, len(palavras)):
+                                            if "CPF:" in palavras[j] or "Situação:" in palavras[j]:
+                                                break
+                                            possivel_nome.append(palavras[j])
+                                        nome = " ".join(possivel_nome).strip()
+                                        break
+                            
+                            class MockMatch:
+                                def groups(self):
+                                    return (matricula.strip(), nome, 
+                                            match_cpf.group(1), match_adm.group(1))
+                            
+                            match_dados = MockMatch()
 
                     if not match_dados:
                         continue
@@ -95,15 +115,20 @@ def extrair_dados_fgts_pdfplumber(caminho_pdf):
                             bloco,
                             flags=re.DOTALL
                         )
-                        
+                    
                     if not match_fgts:
                         linhas = bloco.split('\n')
-                        for linha in linhas:
-                            if "Base IRRF" in linha and "Base FGTS" in linha:
-                                match_fgts = re.search(
-                                    r"Base\s*FGTS\:?\s*([\d\.,]+).*?Valor\s*FGTS\:?\s*([\d\.,]+)",
-                                    linha
-                                )
+                        for i, linha in enumerate(linhas):
+                            if "Base FGTS" in linha:
+                                match_base = re.search(r"Base\s*FGTS\:?\s*([\d\.,]+)", linha)
+                                for j in range(i, min(i+5, len(linhas))):
+                                    match_valor = re.search(r"Valor\s*FGTS\:?\s*([\d\.,]+)", linhas[j])
+                                    if match_valor and match_base:
+                                        class FGTSMatch:
+                                            def groups(self):
+                                                return match_base.group(1), match_valor.group(1)
+                                        match_fgts = FGTSMatch()
+                                        break
                                 if match_fgts:
                                     break
                                     
