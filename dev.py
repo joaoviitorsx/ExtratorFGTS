@@ -173,7 +173,100 @@ def extrair_dados_fgts_pdfplumber(caminho_pdf):
     except Exception as e:
         print(f"Erro ao processar o PDF: {str(e)}")
         return {}
-
+    
+def extrair_dados_folha_pagamento_pdfplumber(caminho_pdf):
+    import pdfplumber
+    import re
+    import warnings
+    
+    warnings.filterwarnings('ignore')
+    dados_por_competencia = {}
+    
+    try:
+        with pdfplumber.open(caminho_pdf) as pdf:
+            texto_completo = ""
+            for pagina in pdf.pages:
+                texto = pagina.extract_text()
+                if not texto:
+                    continue
+                texto_completo += texto + "\n"
+            
+            # Extrair mês/ano de referência
+            match_mes_ano = re.search(r"Mês/Ano:\s*(\d{2}/\d{4})", texto_completo)
+            competencia = match_mes_ano.group(1) if match_mes_ano else "00/0000"
+            
+            # Identificar funcionários e suas informações
+            # Padrão: 6 dígitos seguidos do nome do funcionário
+            padrao_funcionario = r"(\d{6})\s+([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÜÇÑ\s]+?)(?:\nCargo:|Continuação)"
+            funcionarios = re.finditer(padrao_funcionario, texto_completo)
+            
+            for match in funcionarios:
+                matricula = match.group(1).strip()
+                nome = match.group(2).strip()
+                
+                # Encontrar início do bloco do funcionário
+                inicio = match.start()
+                
+                # Encontrar final do bloco (próximo funcionário ou fim do texto)
+                proximo = re.search(r"\d{6}\s+[A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÜÇÑ\s]+?\n", texto_completo[match.end():])
+                fim = match.end() + proximo.start() if proximo else len(texto_completo)
+                
+                bloco = texto_completo[inicio:fim]
+                
+                # Extrair valor FGTS
+                match_fgts = re.search(r"FGTS:\s+([\d\.,]+)", bloco)
+                valor_fgts = "0.00"
+                if match_fgts:
+                    valor_fgts = match_fgts.group(1).replace(".", "").replace(",", ".")
+                
+                # Extrair base de cálculo FGTS
+                match_base_fgts = re.search(r"BC-FGTS:\s+([\d\.,]+)", bloco)
+                base_fgts = "0.00"
+                if match_base_fgts:
+                    base_fgts = match_base_fgts.group(1).replace(".", "").replace(",", ".")
+                
+                # Melhorar a extração da data de admissão - método 1
+                match_admissao = re.search(r"Admissão\s+(\d{2}/\d{2}/\d{4})", bloco)
+                
+                # Método 2: Procurar padrão de linha após "Admissão"
+                if not match_admissao:
+                    linhas = bloco.split('\n')
+                    for i, linha in enumerate(linhas):
+                        if "Admissão" in linha and i+1 < len(linhas):
+                            # Procurar data no início da próxima linha
+                            match_data = re.search(r"^(\d{2}/\d{2}/\d{4})", linhas[i+1].strip())
+                            if match_data:
+                                match_admissao = match_data
+                                break
+                
+                # Método 3: Procurar por data em formato DD/MM/AAAA após "Data: Assinatura:"
+                if not match_admissao:
+                    match_data_assinatura = re.search(r"Data:\s*Assinatura:.*?(\d{2}/\d{2}/\d{4})", bloco, re.DOTALL)
+                    if match_data_assinatura:
+                        match_admissao = match_data_assinatura
+                
+                data_admissao = match_admissao.group(1) if match_admissao else ""
+                
+                # Criar registro no formato esperado
+                registro = {
+                    "Matricula": matricula,
+                    "Empregado": nome,
+                    "CPF": "",  # CPF não disponível neste layout
+                    "Admissao": data_admissao,
+                    "Base FGTS": base_fgts,
+                    "Valor FGTS": valor_fgts
+                }
+                
+                # Adicionar ao dicionário apenas se base FGTS ou valor FGTS forem diferentes de zero
+                if float(base_fgts) > 0 or float(valor_fgts) > 0:
+                    dados_por_competencia.setdefault(competencia, []).append(registro)
+            
+        return dados_por_competencia
+        
+    except Exception as e:
+        print(f"Erro ao processar o PDF de folha de pagamento: {str(e)}")
+        return {}
+    
 def atualizar_visualizacao(registros_por_competencia):
     global dados_extraidos
     dados_extraidos = registros_por_competencia
@@ -190,6 +283,10 @@ def atualizar_visualizacao(registros_por_competencia):
 
 def processar_arquivo(caminho):
     registros = extrair_dados_fgts_pdfplumber(caminho)
+    
+    if not registros:
+        registros = extrair_dados_folha_pagamento_pdfplumber(caminho)
+        
     atualizar_visualizacao(registros)
 
 def processar_pasta():
