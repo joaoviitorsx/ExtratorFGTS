@@ -1,3 +1,4 @@
+import warnings
 import pdfplumber
 import re
 import json
@@ -12,9 +13,11 @@ from tkinter import ttk, filedialog, messagebox
 dados_extraidos = []
 
 def extrair_dados_fgts_pdfplumber(caminho_pdf):
+    import pdfplumber
+    import re
+
     dados_por_competencia = {}
     competencia_atual = None
-    buffer = None
 
     with pdfplumber.open(caminho_pdf) as pdf:
         for pagina in pdf.pages:
@@ -29,48 +32,57 @@ def extrair_dados_fgts_pdfplumber(caminho_pdf):
             if not competencia_atual:
                 continue
 
-            linhas = texto.splitlines()
-            for linha in linhas:
-                linha = linha.strip()
+            blocos = re.split(r"\n(?=Empr\.\:\s*\d+)", texto)
 
-                match_emp = re.search(
-                    r"Empr\.\:\s*(\d+)([A-Z\sÇÁÉÍÓÚÃÕÂÊÔ]+)Situação\:\s*\w+\s+CPF\:\s*([\d\.\-]+)\s+Adm\:\s*(\d{2}/\d{4}|\d{2}/\d{2}/\d{4})",
-                    linha
+            for bloco in blocos:
+                if not bloco.strip().startswith("Empr.:"):
+                    continue
+
+                match_dados = re.search(
+                    r"Empr\.\:\s*(\d+)\s*([A-Z\sÇÃÕÁÉÍÓÚÂÊÔÜ]+?)\s+Situação\:\s*\w+\s+CPF\:\s*([\d\.\-]+).*?Adm\:\s*(\d{2}/\d{4}|\d{2}/\d{2}/\d{4})",
+                    bloco,
+                    flags=re.DOTALL
                 )
+                if not match_dados:
+                    continue
 
-                if match_emp:
-                    matricula, nome, cpf, adm = match_emp.groups()
-                    nome = re.sub(r"\s+", " ", nome.strip()).title()
-                    buffer = {
-                        "Matricula": matricula,
-                        "Empregado": nome,
-                        "CPF": cpf,
-                        "Admissao": adm,
-                        "Base FGTS": None,
-                        "Valor FGTS": None
-                    }
+                matricula, nome, cpf, admissao = match_dados.groups()
+                nome = re.sub(r"\s+", " ", nome.strip()).title()
 
-                # Tenta capturar Base FGTS e Valor FGTS em qualquer linha
-                if "Base FGTS:" in linha and "Valor FGTS:" in linha and buffer:
-                    match_fgts = re.search(
-                        r"Base FGTS:\s*([\d\.,]+).*?Valor FGTS:\s*([\d\.,]+)",
-                        linha
-                    )
-                    if match_fgts:
-                        base_fgts, valor_fgts = match_fgts.groups()
-                        buffer["Base FGTS"] = base_fgts.replace(".", "").replace(",", ".")
-                        buffer["Valor FGTS"] = valor_fgts.replace(".", "").replace(",", ".")
-                        dados_por_competencia.setdefault(competencia_atual, []).append(buffer)
-                        buffer = None  # reset para próximo empregado
+                match_fgts = re.search(
+                    r"Base FGTS:\s*([\d\.,]+)\s+Valor FGTS:\s*([\d\.,]+)", bloco
+                )
+                if not match_fgts:
+                    continue
+
+                base_fgts, valor_fgts = match_fgts.groups()
+
+                registro = {
+                    "Matricula": matricula,
+                    "Empregado": nome,
+                    "CPF": cpf,
+                    "Admissao": admissao,
+                    "Base FGTS": base_fgts.replace(".", "").replace(",", "."),
+                    "Valor FGTS": valor_fgts.replace(".", "").replace(",", ".")
+                }
+
+                dados_por_competencia.setdefault(competencia_atual, []).append(registro)
 
     return dados_por_competencia
 
 def atualizar_visualizacao(registros_por_competencia):
     global dados_extraidos
     dados_extraidos = registros_por_competencia
+
+    total_registros = sum(len(lista) for lista in registros_por_competencia.values())
+    total_competencias = len(registros_por_competencia)
+
     text_widget.delete(1.0, END)
     text_widget.insert(END, json.dumps(registros_por_competencia, indent=4, ensure_ascii=False))
-    status_var.set(f"{sum(len(v) for v in registros_por_competencia.values())} registros distribuídos em {len(registros_por_competencia)} competências.")
+
+    status_var.set(
+        f"{total_registros} empregados extraídos em {total_competencias} competência(s)."
+    )
 
 def processar_arquivo(caminho):
     registros = extrair_dados_fgts_pdfplumber(caminho)
@@ -150,6 +162,136 @@ def salvar_planilha_formatada():
     if messagebox.askyesno("Planilha salva", "Deseja abrir a planilha agora?"):
         webbrowser.open(f"file://{os.path.abspath(caminho_saida)}")
 
+def visualizar_texto_bruto_pdf():
+    """Permite visualizar o texto bruto extraído pelo pdfplumber de um PDF selecionado."""
+    caminho = filedialog.askopenfilename(filetypes=[("Arquivos PDF", "*.pdf")])
+    if not caminho:
+        return
+    
+    # Criar uma nova janela para o debug
+    debug_window = Toplevel(root)
+    debug_window.title("Debug - Texto Extraído pelo PDFPlumber")
+    debug_window.geometry("900x700")
+    
+    # Frame para controles
+    frame_controle = Frame(debug_window)
+    frame_controle.pack(fill=X, padx=10, pady=5)
+    
+    # Label para mostrar a página atual
+    pagina_var = StringVar(value="Página: -")
+    Label(frame_controle, textvariable=pagina_var).pack(side=LEFT, padx=5)
+    
+    # Área de texto com scrollbar
+    frame_texto = Frame(debug_window)
+    frame_texto.pack(fill=BOTH, expand=True, padx=10, pady=5)
+    
+    scrollbar_y = Scrollbar(frame_texto)
+    scrollbar_y.pack(side=RIGHT, fill=Y)
+    
+    scrollbar_x = Scrollbar(frame_texto, orient=HORIZONTAL)
+    scrollbar_x.pack(side=BOTTOM, fill=X)
+    
+    debug_text = Text(frame_texto, wrap="none", yscrollcommand=scrollbar_y.set, 
+                      xscrollcommand=scrollbar_x.set, font=("Courier New", 10))
+    debug_text.pack(side=LEFT, fill=BOTH, expand=True)
+    
+    scrollbar_y.config(command=debug_text.yview)
+    scrollbar_x.config(command=debug_text.xview)
+    
+    # Funções para navegar e salvar
+    paginas_texto = []
+    pagina_atual = [0]  # Usamos uma lista para poder modificar dentro das funções
+    
+    def carregar_pdf():
+        try:
+            paginas_texto.clear()
+            debug_text.delete(1.0, END)
+            
+            with pdfplumber.open(caminho) as pdf:
+                for i, pagina in enumerate(pdf.pages):
+                    texto = pagina.extract_text() or f"[Página {i+1}: Sem texto extraível]"
+                    paginas_texto.append(texto)
+            
+            if paginas_texto:
+                pagina_atual[0] = 0
+                mostrar_pagina()
+                return True
+        except Exception as e:
+            debug_text.delete(1.0, END)
+            debug_text.insert(END, f"Erro ao processar o PDF:\n{str(e)}")
+            return False
+    
+    def mostrar_pagina():
+        if not paginas_texto:
+            return
+        
+        debug_text.delete(1.0, END)
+        debug_text.insert(END, paginas_texto[pagina_atual[0]])
+        pagina_var.set(f"Página: {pagina_atual[0] + 1} de {len(paginas_texto)}")
+    
+    def proxima_pagina():
+        if not paginas_texto or pagina_atual[0] >= len(paginas_texto) - 1:
+            return
+        pagina_atual[0] += 1
+        mostrar_pagina()
+    
+    def pagina_anterior():
+        if not paginas_texto or pagina_atual[0] <= 0:
+            return
+        pagina_atual[0] -= 1
+        mostrar_pagina()
+    
+    def mostrar_todas_paginas():
+        if not paginas_texto:
+            return
+        
+        debug_text.delete(1.0, END)
+        for i, texto in enumerate(paginas_texto):
+            debug_text.insert(END, f"\n\n{'=' * 40}\nPÁGINA {i + 1}\n{'=' * 40}\n\n")
+            debug_text.insert(END, texto)
+        
+        pagina_var.set(f"Mostrando todas as {len(paginas_texto)} páginas")
+    
+    def salvar_texto():
+        if not paginas_texto:
+            messagebox.showwarning("Aviso", "Não há texto para salvar.")
+            return
+        
+        arquivo_saida = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Arquivos de Texto", "*.txt")],
+            title="Salvar Texto Extraído"
+        )
+        
+        if not arquivo_saida:
+            return
+        
+        try:
+            with open(arquivo_saida, "w", encoding="utf-8") as f:
+                for i, texto in enumerate(paginas_texto):
+                    f.write(f"\n\n{'=' * 40}\nPÁGINA {i + 1}\n{'=' * 40}\n\n")
+                    f.write(texto)
+            
+            messagebox.showinfo("Sucesso", f"Texto salvo com sucesso em:\n{arquivo_saida}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao salvar o arquivo:\n{str(e)}")
+    
+    # Adicionar botões de navegação e ações
+    btn_frame = Frame(frame_controle)
+    btn_frame.pack(side=RIGHT)
+    
+    ttk.Button(btn_frame, text="Página Anterior", command=pagina_anterior).pack(side=LEFT, padx=2)
+    ttk.Button(btn_frame, text="Próxima Página", command=proxima_pagina).pack(side=LEFT, padx=2)
+    ttk.Button(btn_frame, text="Todas as Páginas", command=mostrar_todas_paginas).pack(side=LEFT, padx=2)
+    ttk.Button(btn_frame, text="Salvar Texto", command=salvar_texto).pack(side=LEFT, padx=2)
+    
+    # Carregar o PDF
+    if carregar_pdf():
+        debug_window.focus_set()
+    else:
+        messagebox.showerror("Erro", "Não foi possível processar o PDF selecionado.")
+        debug_window.destroy()
+
 root = Tk()
 root.title("Extrator de FGTS de PDFs - Assertivus")
 root.geometry("1100x700")
@@ -168,6 +310,9 @@ btn_pasta.grid(row=0, column=1, padx=5, pady=5)
 
 btn_salvar = ttk.Button(frame_botoes, text="Gerar Planilha Formatada", command=salvar_planilha_formatada)
 btn_salvar.grid(row=0, column=2, padx=5, pady=5)
+
+btn_debug = ttk.Button(frame_botoes, text="Debug PDF", command=visualizar_texto_bruto_pdf)
+btn_debug.grid(row=0, column=3, padx=5, pady=5)
 
 frame_texto = Frame(root)
 frame_texto.grid(row=1, column=0, padx=10, pady=(0,10), sticky="nsew")
